@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FoodMaster - Autoatendimento & Gestão</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- QR Code JS Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    :root {
+      --primary-color: #ef4444;
+      --secondary-color: #f97316;
+      --bg-image: none;
+      --bg-color: #f3f4f6;
+      --card-bg: #ffffff;
+      --text-color: #1f2937;
+      --base-font-size: 16px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      background-image: var(--bg-image);
+      background-size: cover;
+      background-attachment: fixed;
+      color: var(--text-color);
+      font-size: var(--base-font-size);
+    }
+
+    .btn-custom-primary {
+      background-color: var(--primary-color) !important;
+      color: #ffffff !important;
+    }
+    .btn-custom-primary:hover {
+      filter: brightness(0.9);
+    }
+    .text-custom-primary {
+      color: var(--primary-color) !important;
+    }
+    .border-custom-primary {
+      border-color: var(--primary-color) !important;
+    }
+
+    /* Orientação KDS para TV Android */
+    .rotate-0 { transform: rotate(0deg); }
+    .rotate-90 { transform: rotate(90deg); transform-origin: top left; }
+    .rotate-180 { transform: rotate(180deg); }
+    .rotate-270 { transform: rotate(270deg); transform-origin: top left; }
+
+    /* Estilo para Impressão Térmica ESC/POS */
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #print-receipt-area, #print-receipt-area * {
+        visibility: visible !important;
+      }
+      #print-receipt-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 80mm !important;
+        font-family: monospace !important;
+        font-size: 12px !important;
+        color: #000 !important;
+        background: #fff !important;
+        padding: 5px !important;
+      }
+      #qr-codes-output-grid, #qr-codes-output-grid * {
+        visibility: visible !important;
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+  <!-- CABEÇALHO PRINCIPAL -->
+  <header id="main-header" class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Logo e Nome -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="navigateTo('delivery')">
+        <div id="store-logo-icon" class="w-10 h-10 rounded-xl btn-custom-primary flex items-center justify-center font-bold text-xl shadow-md">
+          <i class="fa-solid font-bold fa-utensils"></i>
+        </div>
+        <div>
+          <h1 id="header-store-name" class="font-extrabold text-lg sm:text-xl tracking-tight text-gray-900">FoodMaster</h1>
+          <span id="header-context-badge" class="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+            Delivery
+          </span>
+        </div>
+      </div>
+
+      <!-- Links de Navegação -->
+      <nav class="flex items-center gap-2 sm:gap-3">
+        <button onclick="navigateTo('delivery')" id="nav-btn-delivery" class="px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100">
+          <i class="fa-solid fa-motorcycle"></i>
+          <span class="hidden sm:inline">Delivery</span>
+        </button>
+        <button onclick="navigateTo('track')" id="nav-btn-track" class="px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100">
+          <i class="fa-solid fa-receipt"></i>
+          <span class="hidden sm:inline">Meu Pedido</span>
+        </button>
+        <button onclick="handleAdmAccess()" id="nav-btn-adm" class="px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100">
+          <i class="fa-solid fa-user-shield"></i>
+          <span class="hidden sm:inline">Painel ADM</span>
+        </button>
+
+        <!-- Botão do Carrinho -->
+        <button id="cart-trigger-btn" onclick="toggleCartDrawer()" class="relative p-2.5 rounded-xl btn-custom-primary shadow-md flex items-center justify-center">
+          <i class="fa-solid fa-cart-shopping text-lg"></i>
+          <span id="cart-badge-count" class="absolute -top-1 -right-1 bg-yellow-400 text-gray-900 font-extrabold text-xs w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">0</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- 1. ABA DO CARDÁPIO (MESA OU DELIVERY) -->
+    <section id="view-menu" class="space-y-6">
+      
+      <!-- Banner para Modos de Mesa -->
+      <div id="table-mode-banner" class="hidden bg-gradient-to-r from-red-600 to-orange-500 text-white p-4 rounded-2xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-black">
+            <i class="fa-solid fa-chair"></i>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold">Mesa <span id="active-table-number">--</span></h2>
+            <p class="text-sm text-red-100">Seu pedido será entregue diretamente nesta mesa!</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="callWaiter()" class="bg-white text-red-600 px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-gray-100 flex items-center gap-2">
+            <i class="fa-solid fa-bell"></i> Chamar Garçom
+          </button>
+        </div>
+      </div>
+
+      <!-- Filtro de Categorias -->
+      <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-none" id="category-filters"></div>
+
+      <!-- Grid de Produtos -->
+      <div id="products-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+    </section>
+
+    <!-- 1.1. ABA DE RASTREIO DE PEDIDO EXCLUSIVA DO CLIENTE -->
+    <section id="view-track" class="hidden space-y-6 max-w-2xl mx-auto">
+      <div class="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-200 space-y-6">
+        <div class="text-center space-y-2">
+          <div class="w-16 h-16 bg-red-100 text-red-600 rounded-2xl mx-auto flex items-center justify-center text-2xl font-black shadow-inner">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+          <h2 class="text-2xl font-black text-gray-900">Acompanhe Seu Pedido</h2>
+          <p class="text-sm text-gray-500">Veja o status em tempo real do seu pedido atual (Delivery ou Mesa).</p>
+        </div>
+
+        <!-- Barra de busca rápida por ID -->
+        <div class="flex gap-2">
+          <input type="text" id="track-search-input" placeholder="Digite o ID do pedido (ex: 4321)" class="flex-1 p-3 border rounded-2xl text-sm font-bold">
+          <button onclick="searchMyOrder()" class="btn-custom-primary px-6 py-3 rounded-2xl font-bold text-sm shadow">Buscar</button>
+        </div>
+
+        <!-- Container onde o pedido ativo do cliente aparece -->
+        <div id="client-active-order-card" class="space-y-6">
+          <div class="text-center py-12 text-gray-400 font-bold border-2 border-dashed rounded-2xl">
+            Nenhum pedido recente encontrado neste navegador. Faça um pedido pelo cardápio!
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. PAINEL ADM COM SUB-ABAS -->
+    <section id="view-adm" class="hidden space-y-6">
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="text-2xl font-black text-gray-900 flex items-center gap-3">
+              <i class="fa-solid fa-sliders text-red-500"></i> Painel de Administração
+            </h2>
+            <p class="text-sm text-gray-500 mt-1">Gerencie produtos, cozinha KDS, rota de entregadores (GPS), layout e QR Codes.</p>
+          </div>
+          <button onclick="logoutAdm()" class="bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2">
+            <i class="fa-solid fa-right-from-bracket"></i> Sair do ADM
+          </button>
+        </div>
+
+        <!-- Sub-abas do ADM -->
+        <div class="flex flex-wrap gap-2 border-b border-gray-200 mt-6 pb-2">
+          <button onclick="switchAdminTab('cozinha')" id="adm-tab-cozinha" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm bg-red-50 text-red-600">
+            <i class="fa-solid fa-fire mr-2"></i>Painel Cozinha (KDS)
+          </button>
+          <button onclick="switchAdminTab('driver')" id="adm-tab-driver" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-map-location-dot mr-2"></i>Visão Entregador (GPS)
+          </button>
+          <button onclick="switchAdminTab('products')" id="adm-tab-products" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-burger mr-2"></i>Produtos
+          </button>
+          <button onclick="switchAdminTab('qrcodes')" id="adm-tab-qrcodes" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-qrcode mr-2"></i>QR Codes Mesas
+          </button>
+          <button onclick="switchAdminTab('drivers')" id="adm-tab-drivers" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-truck-ramp-box mr-2"></i>Atribuir Motoboys
+          </button>
+          <button onclick="switchAdminTab('settings')" id="adm-tab-settings" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-palette mr-2"></i>Aparência
+          </button>
+          <button onclick="switchAdminTab('security')" id="adm-tab-security" class="adm-tab-btn px-4 py-2 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100">
+            <i class="fa-solid fa-key mr-2"></i>Trocar Senha
+          </button>
+        </div>
+      </div>
+
+      <!-- SUB-ABA 1: PAINEL COZINHA (KDS) -->
+      <div id="adm-sub-cozinha" class="adm-subview space-y-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+          <div>
+            <h3 class="text-xl font-black text-gray-900 flex items-center gap-2">
+              <i class="fa-solid fa-fire text-red-500"></i> Fila de Pedidos em Tempo Real
+            </h3>
+            <p class="text-xs text-gray-500">Pedidos de Mesas (1 a 200) e Delivery (Mais antigos no topo)</p>
+          </div>
+
+          <!-- Controles do KDS -->
+          <div class="flex flex-wrap items-center gap-3">
+            <button onclick="resetDailyOrders()" class="bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-red-700 shadow-sm">
+              <i class="fa-solid fa-trash-can"></i> Zerar Pedidos e Entregas do Dia
+            </button>
+            <button onclick="rotateScreen()" class="bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-indigo-100">
+              <i class="fa-solid fa-rotate"></i> Girar Tela TV (<span id="rotation-deg-label">0°</span>)
+            </button>
+            <button onclick="connectBluetoothPrinter()" class="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-700 shadow-sm">
+              <i class="fa-solid fa-bluetooth"></i> Conectar Impressora BT
+            </button>
+          </div>
+        </div>
+
+        <!-- Filtros por Status -->
+        <div class="flex gap-2 border-b border-gray-200 pb-2">
+          <button onclick="filterKDS('all')" class="kds-filter-btn px-4 py-2 rounded-xl font-bold text-sm bg-gray-900 text-white" data-status="all">Todos</button>
+          <button onclick="filterKDS('Pendente')" class="kds-filter-btn px-4 py-2 rounded-xl font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200" data-status="Pendente">Pendentes</button>
+          <button onclick="filterKDS('Em Preparo')" class="kds-filter-btn px-4 py-2 rounded-xl font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200" data-status="Em Preparo">Em Preparo</button>
+          <button onclick="filterKDS('Pronto')" class="kds-filter-btn px-4 py-2 rounded-xl font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200" data-status="Pronto">Prontos</button>
+        </div>
+
+        <!-- Container do Grid KDS com Rotação -->
+        <div id="kds-wrapper" class="transition-transform duration-300">
+          <div id="kds-orders-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+        </div>
+      </div>
+
+      <!-- SUB-ABA DE ENTREGADOR (GPS & ROTAS DENTRO DO ADM) -->
+      <div id="adm-sub-driver" class="adm-subview hidden space-y-6">
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 class="text-xl font-black text-gray-900 flex items-center gap-2">
+              <i class="fa-solid fa-map-location-dot text-red-500"></i> Gestão e Rotas de Entrega (GPS)
+            </h3>
+            <p class="text-xs text-gray-500">Acompanhe as rotas de entrega no Waze/Google Maps (Pedidos mais antigos na parte superior).</p>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <button onclick="resetDailyOrders()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm">
+              <i class="fa-solid fa-trash-can"></i> Zerar Entregas do Dia
+            </button>
+            <button onclick="renderDriverDashboard()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2">
+              <i class="fa-solid fa-rotate"></i> Atualizar Rotas
+            </button>
+          </div>
+        </div>
+
+        <div id="driver-orders-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+      </div>
+
+      <!-- SUB-ABA 2: PRODUTOS -->
+      <div id="adm-sub-products" class="adm-subview hidden space-y-6">
+        <div class="flex justify-between items-center">
+          <h3 class="text-lg font-bold text-gray-800">Cardápio Cadastrado</h3>
+          <button onclick="openProductModal()" class="btn-custom-primary px-4 py-2 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> Novo Produto
+          </button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-gray-600">
+              <thead class="bg-gray-50 border-b text-gray-700 font-bold">
+                <tr>
+                  <th class="p-4">Foto</th>
+                  <th class="p-4">Nome</th>
+                  <th class="p-4">Categoria</th>
+                  <th class="p-4">Preço</th>
+                  <th class="p-4 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="admin-products-table-body" class="divide-y"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-ABA 3: GERADOR DE QR CODES -->
+      <div id="adm-sub-qrcodes" class="adm-subview hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold text-gray-900 mb-2">Gerador de QR Code por Mesa</h3>
+          <p class="text-sm text-gray-500 mb-4">Escolha a quantidade de mesas (1 a 200) para gerar os cartões fixos.</p>
+
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Mesa Inicial</label>
+              <input type="number" id="qr-start-table" value="1" min="1" max="200" class="w-28 p-2.5 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Mesa Final</label>
+              <input type="number" id="qr-end-table" value="20" min="1" max="200" class="w-28 p-2.5 border rounded-xl font-bold">
+            </div>
+            <button onclick="generateTableQRCodes()" class="btn-custom-primary px-6 py-2.5 rounded-xl font-bold text-sm shadow">
+              <i class="fa-solid fa-gears mr-2"></i> Gerar QR Codes
+            </button>
+            <button onclick="window.print()" class="bg-gray-800 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-black">
+              <i class="fa-solid fa-print mr-2"></i> Imprimir Cartões de Mesa
+            </button>
+          </div>
+        </div>
+
+        <div id="qr-codes-output-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+      </div>
+
+      <!-- SUB-ABA 4: ATRIBUIR MOTOBOYS -->
+      <div id="adm-sub-drivers" class="adm-subview hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold text-gray-900 mb-2">Atribuição de Entregas (Delivery)</h3>
+          <p class="text-sm text-gray-500 mb-4">Gerencie quais motoboys levarão cada pedido.</p>
+
+          <div id="delivery-orders-dispatch" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+      </div>
+
+      <!-- SUB-ABA 5: PERSONALIZAÇÃO -->
+      <div id="adm-sub-settings" class="adm-subview hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-6 max-w-3xl">
+          <h3 class="text-lg font-bold text-gray-900">Personalização Visual do Sistema</h3>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Nome do Estabelecimento</label>
+              <input type="text" id="setting-store-name" class="w-full p-2.5 border rounded-xl">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Cor Primária</label>
+              <input type="color" id="setting-primary-color" class="w-full h-11 border rounded-xl cursor-pointer">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Tamanho Base de Fonte (px)</label>
+              <input type="number" id="setting-font-size" value="16" min="12" max="22" class="w-full p-2.5 border rounded-xl">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Cor de Fundo da Tela</label>
+              <input type="color" id="setting-bg-color" value="#f3f4f6" class="w-full h-11 border rounded-xl cursor-pointer">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-700 mb-1">URL da Imagem de Fundo (Opcional)</label>
+            <input type="text" id="setting-bg-image" placeholder="https://..." class="w-full p-2.5 border rounded-xl">
+          </div>
+
+          <div class="pt-4 border-t">
+            <button onclick="saveAppearanceSettings()" class="btn-custom-primary px-6 py-3 rounded-xl font-bold shadow text-sm">
+              <i class="fa-solid fa-floppy-disk mr-2"></i> Salvar Alterações Visuais
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUB-ABA 6: TROCAR SENHA ADM -->
+      <div id="adm-sub-security" class="adm-subview hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4 max-w-md">
+          <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <i class="fa-solid fa-lock text-red-500"></i> Trocar Credenciais de Acesso ADM
+          </h3>
+          <p class="text-xs text-gray-500">Altere o login e senha padrão do sistema.</p>
+
+          <form onsubmit="changeAdmCredentials(event)" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Novo Usuário ADM</label>
+              <input type="text" id="new-adm-user" required class="w-full p-2.5 border rounded-xl text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-1">Nova Senha ADM</label>
+              <input type="password" id="new-adm-pass" required class="w-full p-2.5 border rounded-xl text-sm">
+            </div>
+            <button type="submit" class="w-full py-3 rounded-xl btn-custom-primary font-bold shadow text-sm">
+              <i class="fa-solid fa-shield-halved mr-2"></i> Atualizar Credenciais
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- CARRINHO -->
+  <div id="cart-drawer" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="toggleCartDrawer()"></div>
+
+    <aside class="absolute inset-y-0 right-0 max-w-full flex pl-10">
+      <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+        
+        <div class="p-6 border-b border-gray-200 flex items-center justify-between btn-custom-primary">
+          <h2 class="text-lg font-extrabold text-white flex items-center gap-2">
+            <i class="fa-solid fa-basket-shopping"></i> Seu Carrinho
+          </h2>
+          <button onclick="toggleCartDrawer()" class="text-white hover:opacity-80">
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 space-y-4" id="cart-items-container"></div>
+
+        <div class="p-6 border-t border-gray-200 bg-gray-50 space-y-4">
+          
+          <div id="delivery-fields-form" class="space-y-3">
+            <h4 class="text-xs font-extrabold uppercase text-gray-500 tracking-wider">Dados da Entrega</h4>
+            <input type="text" id="customer-name" placeholder="Seu Nome Completo" class="w-full p-2.5 text-sm border rounded-xl">
+            <input type="text" id="customer-phone" placeholder="Telefone / WhatsApp" class="w-full p-2.5 text-sm border rounded-xl">
+            <input type="text" id="customer-address" placeholder="Endereço Completo com Nº" class="w-full p-2.5 text-sm border rounded-xl">
+
+            <!-- Bloco Opcional de Geolocalização -->
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-blue-800">Localização GPS Opcional</span>
+                <button type="button" onclick="captureCustomerLocation()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-location-crosshairs"></i> Capturar GPS
+                </button>
+              </div>
+              <p id="gps-status-text" class="text-xs text-blue-600">Não capturado (Opcional - seu endereço em texto já basta).</p>
+            </div>
+          </div>
+
+          <div class="space-y-1 text-sm">
+            <div class="flex justify-between text-gray-600">
+              <span>Subtotal</span>
+              <span id="cart-subtotal">R$ 0,00</span>
+            </div>
+            <div class="flex justify-between font-extrabold text-lg text-gray-900 border-t pt-2">
+              <span>Total</span>
+              <span id="cart-total" class="text-custom-primary">R$ 0,00</span>
+            </div>
+          </div>
+
+          <button onclick="submitOrder()" class="w-full py-3 rounded-xl font-extrabold btn-custom-primary shadow-lg flex items-center justify-center gap-2 text-base">
+            <i class="fa-solid fa-check"></i> Finalizar & Enviar Pedido
+          </button>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <!-- MODAL ADICIONAR/EDITAR PRODUTO -->
+  <div id="modal-product" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 id="modal-product-title" class="text-lg font-bold">Adicionar Produto</h3>
+        <button onclick="closeProductModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-x"></i></button>
+      </div>
+
+      <form id="form-product" onsubmit="saveProduct(event)" class="space-y-3">
+        <input type="hidden" id="prod-id">
+        <div>
+          <label class="block text-xs font-bold text-gray-700">Nome do Produto</label>
+          <input type="text" id="prod-name" required class="w-full p-2.5 border rounded-xl text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-700">Categoria</label>
+            <input type="text" id="prod-category" placeholder="Lanches, Bebidas..." required class="w-full p-2.5 border rounded-xl text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-700">Preço (R$)</label>
+            <input type="number" step="0.01" id="prod-price" required class="w-full p-2.5 border rounded-xl text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-700">URL da Imagem</label>
+          <input type="url" id="prod-image" placeholder="https://..." required class="w-full p-2.5 border rounded-xl text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-700">Descrição</label>
+          <textarea id="prod-desc" rows="2" class="w-full p-2.5 border rounded-xl text-sm"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeProductModal()" class="px-4 py-2 rounded-xl border text-sm font-bold">Cancelar</button>
+          <button type="submit" class="px-5 py-2 rounded-xl btn-custom-primary text-sm font-bold shadow">Salvar Produto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE LOGIN ADM -->
+  <div id="modal-adm-login" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 bg-red-100 text-red-600 rounded-2xl mx-auto flex items-center justify-center text-xl font-bold mb-2">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <h3 class="text-lg font-bold text-gray-900">Acesso Restrito ADM</h3>
+        <p class="text-xs text-gray-500">Digite seu usuário e senha para continuar</p>
+      </div>
+
+      <form onsubmit="verifyAdmLogin(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">Usuário</label>
+          <input type="text" id="adm-user-input" required class="w-full p-2.5 border rounded-xl text-sm" placeholder="Usuário">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">Senha</label>
+          <input type="password" id="adm-pass-input" required class="w-full p-2.5 border rounded-xl text-sm" placeholder="••••••">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="closeAdmLoginModal()" class="w-1/2 py-2.5 rounded-xl border text-sm font-bold text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button type="submit" class="w-1/2 py-2.5 rounded-xl btn-custom-primary text-sm font-bold shadow">Entrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ÁREA DE IMPRESSÃO DE CUPOM -->
+  <div id="print-receipt-area"></div>
+
+  <!-- ALERTA SONORO -->
+  <audio id="audio-alert" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- LÓGICA E REGRAS EM JAVASCRIPT -->
+  <script>
+    const DEFAULT_PRODUCTS = [
+      { id: 1, name: 'Hambúrguer Artesanal Smash', category: 'Lanches', price: 28.90, image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500', desc: 'Pão brioche, 2x smash burger 90g, queijo prato e maionese da casa.' },
+      { id: 2, name: 'Pizza Pepperoni Especial', category: 'Pizzas', price: 54.00, image: 'https://images.unsplash.com/photo-1628840042765-356cda07504e?w=500', desc: 'Massa artesanal, molho de tomate, mussarela premium e pepperoni abundante.' },
+      { id: 3, name: 'Batata Frita Suprema', category: 'Porções', price: 24.50, image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=500', desc: 'Batatas crocantes cobertas com cheddar cremoso e bacon crispy.' },
+      { id: 4, name: 'Refrigerante Lata 350ml', category: 'Bebidas', price: 6.50, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500', desc: 'Gelado e refrescante.' }
+    ];
+
+    let products = JSON.parse(localStorage.getItem('fm_products')) || DEFAULT_PRODUCTS;
+    let orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+    let cart = [];
+    let currentTable = null;
+    let customerCoords = null;
+    let currentRotation = 0;
+    let bluetoothDevice = null;
+    let bluetoothGattServer = null;
+    let isAdmAuthenticated = false;
+    let currentKDSFilter = 'all';
+
+    let admCredentials = JSON.parse(localStorage.getItem('fm_adm_creds')) || {
+      user: '60557720354',
+      pass: '040685'
+    };
+
+    let settings = JSON.parse(localStorage.getItem('fm_settings')) || {
+      storeName: 'FoodMaster',
+      primaryColor: '#ef4444',
+      fontSize: '16',
+      bgColor: '#f3f4f6',
+      bgImage: ''
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      applySettings();
+      detectRoute();
+      renderCategoryFilters();
+      renderProducts();
+      renderKDS();
+      renderAdminProducts();
+      renderDriverDashboard();
+      renderClientActiveOrder();
+
+      window.addEventListener('hashchange', detectRoute);
+
+      window.addEventListener('storage', () => {
+        orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+        products = JSON.parse(localStorage.getItem('fm_products')) || products;
+        renderKDS();
+        renderProducts();
+        renderDriverDashboard();
+        renderClientActiveOrder();
+      });
+    });
+
+    function detectRoute() {
+      const hash = window.location.hash.replace('#', '');
+      const urlParams = new URLSearchParams(window.location.search);
+      const tableParam = urlParams.get('mesa') || (hash.startsWith('mesa-') ? hash.split('-')[1] : null);
+
+      if (tableParam) {
+        currentTable = parseInt(tableParam);
+        showTableModeUI(currentTable);
+        navigateTo('menu', false);
+      } else if (hash === 'adm') {
+        if (isAdmAuthenticated) {
+          navigateTo('adm', false);
+        } else {
+          openAdmLoginModal();
+        }
+      } else if (hash === 'track') {
+        navigateTo('track', false);
+      } else {
+        currentTable = null;
+        showDeliveryModeUI();
+        navigateTo('menu', false);
+      }
+    }
+
+    function navigateTo(viewId, updateHash = true) {
+      if (viewId === 'delivery') {
+        currentTable = null;
+        showDeliveryModeUI();
+        viewId = 'menu';
+        if (updateHash) window.location.hash = '';
+      } else if (updateHash) {
+        window.location.hash = (viewId === 'menu') ? '' : viewId;
+      }
+
+      if (viewId === 'adm' && !isAdmAuthenticated) {
+        openAdmLoginModal();
+        return;
+      }
+
+      document.querySelectorAll('main > section').forEach(el => el.classList.add('hidden'));
+      const activeSection = document.getElementById(`view-${viewId}`);
+      if (activeSection) activeSection.classList.remove('hidden');
+
+      const isDeliveryActive = (viewId === 'menu' && !currentTable);
+      const deliveryBtn = document.getElementById('nav-btn-delivery');
+      const trackBtn = document.getElementById('nav-btn-track');
+      const admBtn = document.getElementById('nav-btn-adm');
+
+      if (deliveryBtn) {
+        deliveryBtn.className = isDeliveryActive 
+          ? 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 bg-gray-100 text-custom-primary' 
+          : 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100';
+      }
+
+      if (trackBtn) {
+        trackBtn.className = (viewId === 'track')
+          ? 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 bg-gray-100 text-custom-primary' 
+          : 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100';
+      }
+
+      if (admBtn) {
+        admBtn.className = (viewId === 'adm')
+          ? 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 bg-gray-100 text-custom-primary' 
+          : 'px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 hover:bg-gray-100';
+      }
+
+      if (viewId === 'adm') {
+        renderKDS();
+      }
+      if (viewId === 'track') {
+        renderClientActiveOrder();
+      }
+    }
+
+    function handleAdmAccess() {
+      if (isAdmAuthenticated) {
+        navigateTo('adm');
+      } else {
+        openAdmLoginModal();
+      }
+    }
+
+    function openAdmLoginModal() {
+      document.getElementById('modal-adm-login').classList.remove('hidden');
+      document.getElementById('adm-user-input').value = '';
+      document.getElementById('adm-pass-input').value = '';
+    }
+
+    function closeAdmLoginModal() {
+      document.getElementById('modal-adm-login').classList.add('hidden');
+      if (!isAdmAuthenticated) {
+        navigateTo('delivery');
+      }
+    }
+
+    function verifyAdmLogin(event) {
+      event.preventDefault();
+      const user = document.getElementById('adm-user-input').value.trim();
+      const pass = document.getElementById('adm-pass-input').value.trim();
+
+      if (user === admCredentials.user && pass === admCredentials.pass) {
+        isAdmAuthenticated = true;
+        closeAdmLoginModal();
+        navigateTo('adm');
+        document.getElementById('new-adm-user').value = admCredentials.user;
+        document.getElementById('new-adm-pass').value = admCredentials.pass;
+        switchAdminTab('cozinha');
+      } else {
+        alert('Usuário ou senha incorretos!');
+      }
+    }
+
+    function changeAdmCredentials(event) {
+      event.preventDefault();
+      const newU = document.getElementById('new-adm-user').value.trim();
+      const newP = document.getElementById('new-adm-pass').value.trim();
+
+      if (newU && newP) {
+        admCredentials = { user: newU, pass: newP };
+        localStorage.setItem('fm_adm_creds', JSON.stringify(admCredentials));
+        alert('Novas credenciais salvas com sucesso!');
+      }
+    }
+
+    function logoutAdm() {
+      isAdmAuthenticated = false;
+      navigateTo('delivery');
+    }
+
+    function showTableModeUI(tableNum) {
+      document.getElementById('table-mode-banner').classList.remove('hidden');
+      document.getElementById('active-table-number').innerText = tableNum;
+      document.getElementById('header-context-badge').innerText = `Mesa ${tableNum}`;
+      document.getElementById('delivery-fields-form').classList.add('hidden');
+    }
+
+    function showDeliveryModeUI() {
+      document.getElementById('table-mode-banner').classList.add('hidden');
+      document.getElementById('header-context-badge').innerText = 'Delivery';
+      document.getElementById('delivery-fields-form').classList.remove('hidden');
+    }
+
+    function applySettings() {
+      document.documentElement.style.setProperty('--primary-color', settings.primaryColor);
+      document.documentElement.style.setProperty('--bg-color', settings.bgColor);
+      document.documentElement.style.setProperty('--base-font-size', settings.fontSize + 'px');
+      if (settings.bgImage) {
+        document.documentElement.style.setProperty('--bg-image', `url('${settings.bgImage}')`);
+      } else {
+        document.documentElement.style.setProperty('--bg-image', 'none');
+      }
+      document.getElementById('header-store-name').innerText = settings.storeName;
+
+      document.getElementById('setting-store-name').value = settings.storeName;
+      document.getElementById('setting-primary-color').value = settings.primaryColor;
+      document.getElementById('setting-font-size').value = settings.fontSize;
+      document.getElementById('setting-bg-color').value = settings.bgColor;
+      document.getElementById('setting-bg-image').value = settings.bgImage;
+    }
+
+    function saveAppearanceSettings() {
+      settings.storeName = document.getElementById('setting-store-name').value || 'FoodMaster';
+      settings.primaryColor = document.getElementById('setting-primary-color').value;
+      settings.fontSize = document.getElementById('setting-font-size').value;
+      settings.bgColor = document.getElementById('setting-bg-color').value;
+      settings.bgImage = document.getElementById('setting-bg-image').value;
+
+      localStorage.setItem('fm_settings', JSON.stringify(settings));
+      applySettings();
+      alert('Configurações salvas!');
+    }
+
+    function captureCustomerLocation() {
+      const statusEl = document.getElementById('gps-status-text');
+      if (!navigator.geolocation) {
+        statusEl.innerText = 'Geolocalização não suportada no navegador.';
+        return;
+      }
+      statusEl.innerText = 'Obtendo localização GPS...';
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          customerCoords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          statusEl.innerHTML = `<span class="text-green-700 font-bold"><i class="fa-solid fa-check-circle"></i> GPS Capturado com sucesso! (${customerCoords.lat.toFixed(4)}, ${customerCoords.lng.toFixed(4)})</span>`;
+        },
+        (error) => {
+          statusEl.innerHTML = `<span class="text-amber-700">GPS não autorizado ou indisponível (opcional). O pedido seguirá normalmente.</span>`;
+          customerCoords = null;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function renderCategoryFilters() {
+      const categories = ['Todos', ...new Set(products.map(p => p.category))];
+      const container = document.getElementById('category-filters');
+      container.innerHTML = categories.map((cat, idx) => `
+        <button onclick="filterCategory('${cat}')" class="px-5 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition ${idx === 0 ? 'btn-custom-primary shadow-md' : 'bg-white text-gray-700 hover:bg-gray-100'}">
+          ${cat}
+        </button>
+      `).join('');
+    }
+
+    function renderProducts(categoryFilter = 'Todos') {
+      const container = document.getElementById('products-grid');
+      const filtered = categoryFilter === 'Todos' ? products : products.filter(p => p.category === categoryFilter);
+
+      container.innerHTML = filtered.map(p => `
+        <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition border border-gray-100 flex flex-col justify-between">
+          <div>
+            <img src="${p.image}" alt="${p.name}" class="w-full h-48 object-cover" onerror="this.src='https://via.placeholder.com/400x300?text=Sem+Foto'">
+            <div class="p-4 space-y-2">
+              <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">${p.category}</span>
+              <h3 class="font-bold text-gray-900 text-lg leading-snug">${p.name}</h3>
+              <p class="text-xs text-gray-500 line-clamp-2">${p.desc}</p>
+            </div>
+          </div>
+          <div class="p-4 pt-0 flex items-center justify-between">
+            <span class="font-extrabold text-gray-900 text-lg">R$ ${p.price.toFixed(2).replace('.', ',')}</span>
+            <button onclick="addToCart(${p.id})" class="btn-custom-primary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
+              <i class="fa-solid fa-plus"></i> Adicionar
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterCategory(cat) {
+      renderProducts(cat);
+    }
+
+    function addToCart(productId) {
+      const prod = products.find(p => p.id === productId);
+      const existing = cart.find(item => item.id === productId);
+
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({ ...prod, qty: 1, notes: '' });
+      }
+
+      updateCartUI();
+      toggleCartDrawer(true);
+    }
+
+    function updateCartUI() {
+      const container = document.getElementById('cart-items-container');
+      const countBadge = document.getElementById('cart-badge-count');
+      const subtotalEl = document.getElementById('cart-subtotal');
+      const totalEl = document.getElementById('cart-total');
+
+      const totalItems = cart.reduce((acc, item) => acc + item.qty, 0);
+      const grandTotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+
+      countBadge.innerText = totalItems;
+      subtotalEl.innerText = `R$ ${grandTotal.toFixed(2).replace('.', ',')}`;
+      totalEl.innerText = `R$ ${grandTotal.toFixed(2).replace('.', ',')}`;
+
+      if (cart.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400">
+            <i class="fa-solid fa-cart-flatbed text-4xl mb-3"></i>
+            <p>Seu carrinho está vazio.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = cart.map((item, idx) => `
+        <div class="bg-gray-50 p-3 rounded-xl border border-gray-200 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-gray-800 text-sm">${item.name}</div>
+            <div class="font-extrabold text-sm text-gray-900">R$ ${(item.price * item.qty).toFixed(2).replace('.', ',')}</div>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <input type="text" placeholder="Observações..." value="${item.notes}" onchange="updateCartNotes(${idx}, this.value)" class="w-full text-xs p-1.5 border rounded-lg bg-white">
+            <div class="flex items-center border bg-white rounded-lg">
+              <button onclick="changeQty(${idx}, -1)" class="px-2 py-1 text-xs font-bold hover:bg-gray-100 text-gray-600">-</button>
+              <span class="px-2 text-xs font-bold">${item.qty}</span>
+              <button onclick="changeQty(${idx}, 1)" class="px-2 py-1 text-xs font-bold hover:bg-gray-100 text-gray-600">+</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function changeQty(index, delta) {
+      cart[index].qty += delta;
+      if (cart[index].qty <= 0) cart.splice(index, 1);
+      updateCartUI();
+    }
+
+    function updateCartNotes(index, value) {
+      cart[index].notes = value;
+    }
+
+    function toggleCartDrawer(forceOpen = false) {
+      const drawer = document.getElementById('cart-drawer');
+      if (forceOpen) {
+        drawer.classList.remove('hidden');
+      } else {
+        drawer.classList.toggle('hidden');
+      }
+    }
+
+    function submitOrder() {
+      if (cart.length === 0) {
+        alert('Adicione ao menos um item ao carrinho!');
+        return;
+      }
+
+      let customerData = {};
+
+      if (currentTable) {
+        customerData = { type: 'Mesa', table: currentTable };
+      } else {
+        const name = document.getElementById('customer-name').value.trim();
+        const phone = document.getElementById('customer-phone').value.trim();
+        const address = document.getElementById('customer-address').value.trim();
+
+        if (!name || !address) {
+          alert('Por favor, preencha seu Nome e Endereço para entrega!');
+          return;
+        }
+
+        customerData = { 
+          type: 'Delivery', 
+          name, 
+          phone, 
+          address, 
+          coords: customerCoords ? { ...customerCoords } : null 
+        };
+      }
+
+      const newOrder = {
+        id: Date.now(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        items: [...cart],
+        status: 'Pendente',
+        total: cart.reduce((acc, item) => acc + (item.price * item.qty), 0),
+        customer: customerData,
+        driver: null
+      };
+
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      orders.push(newOrder);
+      localStorage.setItem('fm_orders', JSON.stringify(orders));
+
+      // Salva o ID do pedido no navegador do cliente para rastreio automático
+      localStorage.setItem('fm_my_last_order', newOrder.id);
+
+      cart = [];
+      customerCoords = null;
+      updateCartUI();
+      toggleCartDrawer(false);
+
+      playAlertAudio();
+      renderKDS();
+      renderDriverDashboard();
+
+      // Redireciona o cliente direto para a aba de acompanhamento do seu pedido
+      navigateTo('track');
+    }
+
+    function callWaiter() {
+      alert(`Garçom solicitado para a Mesa ${currentTable}!`);
+    }
+
+    function renderClientActiveOrder(searchId = null) {
+      const container = document.getElementById('client-active-order-card');
+      if (!container) return;
+
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      
+      let targetId = searchId || localStorage.getItem('fm_my_last_order');
+      let order = null;
+
+      if (targetId) {
+        order = orders.find(o => o.id.toString() === targetId.toString());
+      }
+
+      if (!order && orders.length > 0) {
+        order = orders[orders.length - 1];
+      }
+
+      if (!order) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400 font-bold border-2 border-dashed rounded-2xl">
+            <i class="fa-solid fa-box-open text-3xl mb-2"></i>
+            <p>Nenhum pedido recente encontrado.</p>
+          </div>`;
+        return;
+      }
+
+      const searchInput = document.getElementById('track-search-input');
+      if (searchInput && !searchId) searchInput.value = order.id;
+
+      const statuses = ['Pendente', 'Em Preparo', 'Pronto', 'Saiu para Entrega', 'Entregue'];
+      let currentStatusIdx = statuses.indexOf(order.status);
+      if (currentStatusIdx === -1) currentStatusIdx = 0;
+
+      const isTable = order.customer.type === 'Mesa';
+
+      container.innerHTML = `
+        <div class="bg-gray-50 border border-gray-200 rounded-3xl p-6 space-y-6 shadow-sm">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-4">
+            <div>
+              <span class="text-xs uppercase font-extrabold px-2.5 py-1 rounded-full bg-red-100 text-red-700">${order.customer.type}</span>
+              <h3 class="text-xl font-black text-gray-900 mt-1">${isTable ? `Mesa ${order.customer.table}` : order.customer.name}</h3>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-bold text-gray-500 block">ID: #${order.id}</span>
+              <span class="text-sm font-black text-custom-primary">R$ ${order.total.toFixed(2).replace('.', ',')}</span>
+            </div>
+          </div>
+
+          <!-- Stepper de Status -->
+          <div class="space-y-3">
+            <h4 class="text-xs font-extrabold uppercase text-gray-500 tracking-wider">Status Atual: <span class="text-custom-primary text-sm">${order.status}</span></h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="p-3 rounded-xl border text-center ${currentStatusIdx >= 0 ? 'bg-red-500 text-white font-bold' : 'bg-white text-gray-400'}">
+                <i class="fa-solid fa-clock mb-1 block"></i> Pendente
+              </div>
+              <div class="p-3 rounded-xl border text-center ${currentStatusIdx >= 1 ? 'bg-red-500 text-white font-bold' : 'bg-white text-gray-400'}">
+                <i class="fa-solid fa-fire mb-1 block"></i> Em Preparo
+              </div>
+              <div class="p-3 rounded-xl border text-center ${currentStatusIdx >= 2 ? 'bg-red-500 text-white font-bold' : 'bg-white text-gray-400'}">
+                <i class="fa-solid fa-bell-concierge mb-1 block"></i> Pronto
+              </div>
+              <div class="p-3 rounded-xl border text-center ${currentStatusIdx >= 3 ? 'bg-green-600 text-white font-bold' : 'bg-white text-gray-400'}">
+                <i class="fa-solid fa-motorcycle mb-1 block"></i> ${isTable ? 'Entregue Mesa' : 'Entregue'}
+              </div>
+            </div>
+          </div>
+
+          <!-- Itens do Pedido -->
+          <div class="space-y-2 border-t pt-4">
+            <h4 class="text-xs font-extrabold uppercase text-gray-500 tracking-wider">Itens Pedidos</h4>
+            <div class="space-y-2 divide-y divide-gray-200">
+              ${order.items.map(i => `
+                <div class="pt-2 flex justify-between items-center text-sm">
+                  <div><span class="font-bold text-gray-900">${i.qty}x</span> ${i.name}</div>
+                  <div class="font-bold text-gray-600">R$ ${(i.price * i.qty).toFixed(2).replace('.', ',')}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          ${!isTable && order.driver ? `
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 font-bold flex items-center gap-2">
+              <i class="fa-solid fa-motorcycle text-lg"></i> Entregador atribuído: ${order.driver}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function searchMyOrder() {
+      const val = document.getElementById('track-search-input').value.trim();
+      if (!val) {
+        alert('Digite o ID do pedido.');
+        return;
+      }
+      renderClientActiveOrder(val);
+    }
+
+    function filterKDS(status) {
+      currentKDSFilter = status;
+      document.querySelectorAll('.kds-filter-btn').forEach(btn => {
+        if (btn.dataset.status === status) {
+          btn.classList.add('bg-gray-900', 'text-white');
+          btn.classList.remove('bg-gray-100', 'text-gray-600');
+        } else {
+          btn.classList.remove('bg-gray-900', 'text-white');
+          btn.classList.add('bg-gray-100', 'text-gray-600');
+        }
+      });
+      renderKDS();
+    }
+
+    function renderKDS() {
+      const container = document.getElementById('kds-orders-grid');
+      if (!container) return;
+
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      let filtered = [...orders].sort((a, b) => Number(a.id) - Number(b.id));
+
+      if (currentKDSFilter !== 'all') {
+        filtered = filtered.filter(o => o.status === currentKDSFilter);
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-gray-400 font-bold">Nenhum pedido na cozinha no momento.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(order => {
+        const isTable = order.customer.type === 'Mesa';
+        const statusColors = {
+          'Pendente': 'bg-yellow-100 border-yellow-300 text-yellow-800',
+          'Em Preparo': 'bg-blue-100 border-blue-300 text-blue-800',
+          'Pronto': 'bg-green-100 border-green-300 text-green-800',
+          'Saiu para Entrega': 'bg-purple-100 border-purple-300 text-purple-800',
+          'Entregue': 'bg-gray-100 border-gray-300 text-gray-800'
+        };
+
+        return `
+          <div class="bg-white rounded-2xl border-2 shadow-sm flex flex-col justify-between overflow-hidden ${isTable ? 'border-red-400' : 'border-indigo-400'}">
+            <div class="p-4 ${isTable ? 'bg-red-500' : 'bg-indigo-600'} text-white flex items-center justify-between">
+              <div>
+                <span class="text-xs uppercase font-extrabold tracking-wider opacity-80">${order.customer.type}</span>
+                <h3 class="text-xl font-black">${isTable ? `Mesa ${order.customer.table}` : order.customer.name}</h3>
+              </div>
+              <div class="text-right">
+                <span class="text-xs block font-bold">${order.time}</span>
+                <span class="inline-block px-2 py-0.5 rounded text-xs font-bold bg-white/20">#${order.id.toString().slice(-4)}</span>
+              </div>
+            </div>
+
+            ${!isTable ? `
+              <div class="px-4 py-2 bg-indigo-50 border-b border-indigo-100 text-xs text-indigo-900 space-y-1">
+                <div><i class="fa-solid fa-location-dot"></i> ${order.customer.address}</div>
+                ${order.customer.coords ? `<div class="text-green-700 font-bold"><i class="fa-solid fa-satellite-dish"></i> GPS Preciso Anexado</div>` : `<div class="text-gray-500 italic"><i class="fa-solid fa-info-circle"></i> Entrega por Endereço em Texto</div>`}
+              </div>
+            ` : ''}
+
+            <div class="p-4 flex-1 space-y-2 divide-y divide-gray-100">
+              ${order.items.map(item => `
+                <div class="pt-2 flex justify-between items-start text-sm">
+                  <div>
+                    <span class="font-black text-gray-900">${item.qty}x</span> ${item.name}
+                    ${item.notes ? `<p class="text-xs text-red-600 font-semibold mt-0.5"><i class="fa-solid fa-comment-dots"></i> ${item.notes}</p>` : ''}
+                  </div>
+                  <span class="font-bold text-gray-500 text-xs">R$ ${(item.price * item.qty).toFixed(2)}</span>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="p-4 bg-gray-50 border-t border-gray-100 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="px-3 py-1 rounded-full text-xs font-extrabold ${statusColors[order.status] || 'bg-gray-100'}">
+                  ${order.status}
+                </span>
+                <button onclick="printThermalReceiptById(${order.id})" class="text-gray-500 hover:text-gray-900 text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-print"></i> Imprimir
+                </button>
+              </div>
+
+              <div class="grid grid-cols-3 gap-1">
+                <button onclick="updateOrderStatus(${order.id}, 'Pendente')" class="py-1.5 text-xs font-bold rounded-lg border bg-white hover:bg-yellow-50">Pendente</button>
+                <button onclick="updateOrderStatus(${order.id}, 'Em Preparo')" class="py-1.5 text-xs font-bold rounded-lg border bg-white hover:bg-blue-50">Preparo</button>
+                <button onclick="updateOrderStatus(${order.id}, 'Pronto')" class="py-1.5 text-xs font-bold rounded-lg border bg-white hover:bg-green-50">Pronto</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      renderAdminDeliveryDispatch();
+      renderClientActiveOrder();
+    }
+
+    function updateOrderStatus(orderId, newStatus) {
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        order.status = newStatus;
+        localStorage.setItem('fm_orders', JSON.stringify(orders));
+        renderKDS();
+        renderDriverDashboard();
+        renderClientActiveOrder();
+      }
+    }
+
+    function renderDriverDashboard() {
+      const container = document.getElementById('driver-orders-list');
+      if (!container) return;
+
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      const deliveries = [...orders].sort((a, b) => Number(a.id) - Number(b.id)).filter(o => o.customer.type === 'Delivery' && o.status !== 'Entregue');
+
+      if (deliveries.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-gray-400 font-bold">Nenhum pedido de delivery ativo no momento.</div>`;
+        return;
+      }
+
+      container.innerHTML = deliveries.map(o => {
+        let mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.customer.address)}`;
+        let wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(o.customer.address)}`;
+
+        if (o.customer.coords) {
+          mapsUrl = `https://www.google.com/maps/search/?api=1&query=${o.customer.coords.lat},${o.customer.coords.lng}`;
+          wazeUrl = `https://waze.com/ul?ll=${o.customer.coords.lat},${o.customer.coords.lng}&navigate=yes`;
+        }
+
+        return `
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4 flex flex-col justify-between">
+            <div class="space-y-2">
+              <div class="flex justify-between items-center">
+                <span class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-indigo-100 text-indigo-800">Pedido #${o.id.toString().slice(-4)}</span>
+                <span class="text-xs font-bold text-gray-500">${o.time}</span>
+              </div>
+              <h3 class="text-lg font-black text-gray-900">${o.customer.name}</h3>
+              <p class="text-xs text-gray-600"><i class="fa-solid fa-phone text-gray-400 mr-1"></i> ${o.customer.phone || 'Não informado'}</p>
+              <div class="p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-800">
+                <p class="font-bold mb-1"><i class="fa-solid fa-location-dot text-red-500 mr-1"></i> Endereço:</p>
+                <p>${o.customer.address}</p>
+                ${o.customer.coords ? `<p class="text-green-700 font-semibold mt-1"><i class="fa-solid fa-satellite-dish"></i> GPS enviado pelo cliente</p>` : `<p class="text-gray-500 italic mt-1"><i class="fa-solid fa-map"></i> Navegação por endereço em texto</p>`}
+              </div>
+              <div class="text-xs font-bold text-gray-700">
+                Entregador: <span class="text-custom-primary">${o.driver || 'Não atribuído'}</span>
+              </div>
+            </div>
+
+            <div class="space-y-2 pt-2 border-t">
+              <div class="grid grid-cols-2 gap-2">
+                <a href="${mapsUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-xl text-xs font-bold text-center transition flex items-center justify-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-map"></i> Google Maps
+                </a>
+                <a href="${wazeUrl}" target="_blank" class="bg-sky-500 hover:bg-sky-600 text-white py-2 px-3 rounded-xl text-xs font-bold text-center transition flex items-center justify-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-location-arrow"></i> Waze
+                </a>
+              </div>
+
+              <div class="flex gap-2 pt-1">
+                <button onclick="updateOrderStatus(${o.id}, 'Saiu para Entrega')" class="w-1/2 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold border border-purple-200">
+                  Saiu p/ Entrega
+                </button>
+                <button onclick="updateOrderStatus(${o.id}, 'Entregue')" class="w-1/2 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-sm">
+                  Concluir Entrega
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function rotateScreen() {
+      currentRotation = (currentRotation + 90) % 360;
+      const wrapper = document.getElementById('kds-wrapper');
+      wrapper.className = `transition-transform duration-300 rotate-${currentRotation}`;
+      document.getElementById('rotation-deg-label').innerText = `${currentRotation}°`;
+    }
+
+    function playAlertAudio() {
+      const audio = document.getElementById('audio-alert');
+      if (audio) {
+        audio.play().catch(() => {});
+      }
+    }
+
+    async function connectBluetoothPrinter() {
+      try {
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+        });
+        bluetoothGattServer = await bluetoothDevice.gatt.connect();
+        alert(`Conectado à impressora: ${bluetoothDevice.name}`);
+      } catch (err) {
+        alert('Impressão Bluetooth não iniciada ou não suportada no dispositivo.');
+      }
+    }
+
+    function printThermalReceiptById(orderId) {
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      const order = orders.find(o => o.id === orderId);
+      if (order) printThermalReceipt(order);
+    }
+
+    function printThermalReceipt(order) {
+      const isTable = order.customer.type === 'Mesa';
+      const receiptHTML = `
+        <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px;">
+          <h2 style="margin: 0; font-size: 16px; font-weight: bold;">${settings.storeName}</h2>
+          <p style="margin: 2px 0;">PEDIDO #${order.id.toString().slice(-4)} - ${order.time}</p>
+          <h3 style="margin: 4px 0; font-size: 14px;">${isTable ? `MESA ${order.customer.table}` : 'DELIVERY'}</h3>
+        </div>
+        ${!isTable ? `
+          <div style="border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px;">
+            <p style="margin: 0;"><strong>Cliente:</strong> ${order.customer.name}</p>
+            <p style="margin: 0;"><strong>Tel:</strong> ${order.customer.phone || 'N/A'}</p>
+            <p style="margin: 0;"><strong>End:</strong> ${order.customer.address}</p>
+            ${order.customer.coords ? `<p style="margin: 2px 0; font-size:10px;">[GPS: ${order.customer.coords.lat.toFixed(4)}, ${order.customer.coords.lng.toFixed(4)}]</p>` : ''}
+          </div>
+        ` : ''}
+        <div style="border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px;">
+          ${order.items.map(i => `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+              <span>${i.qty}x ${i.name}</span>
+              <span>R$ ${(i.price * i.qty).toFixed(2)}</span>
+            </div>
+            ${i.notes ? `<div style="font-size: 10px; font-style: italic;">Obs: ${i.notes}</div>` : ''}
+          `).join('')}
+        </div>
+        <div style="text-align: right; font-weight: bold; font-size: 14px;">
+          TOTAL: R$ ${order.total.toFixed(2)}
+        </div>
+      `;
+
+      document.getElementById('print-receipt-area').innerHTML = receiptHTML;
+      window.print();
+    }
+
+    function generateTableQRCodes() {
+      const start = parseInt(document.getElementById('qr-start-table').value) || 1;
+      const end = parseInt(document.getElementById('qr-end-table').value) || 20;
+      const container = document.getElementById('qr-codes-output-grid');
+
+      if (!container) return;
+      container.innerHTML = '';
+
+      const baseUrl = window.location.href.split('#')[0].split('?')[0];
+
+      for (let i = start; i <= end; i++) {
+        const tableUrl = `${baseUrl}?mesa=${i}`;
+        const card = document.createElement('div');
+        card.className = 'bg-white p-4 rounded-2xl border-2 border-gray-200 shadow-sm flex flex-col items-center text-center space-y-2';
+
+        const qrId = `qrcode-table-${i}`;
+        card.innerHTML = `
+          <h4 class="font-extrabold text-lg text-gray-900">MESA ${i}</h4>
+          <div id="${qrId}" class="p-2 bg-white rounded-lg border flex justify-center"></div>
+          <p class="text-xs text-gray-400 font-semibold">Escaneie para pedir</p>
+        `;
+
+        container.appendChild(card);
+
+        try {
+          new QRCode(document.getElementById(qrId), {
+            text: tableUrl,
+            width: 100,
+            height: 100,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+          });
+        } catch (e) {
+          console.error("Erro ao gerar QR Code:", e);
+        }
+      }
+    }
+
+    function switchAdminTab(tabName) {
+      document.querySelectorAll('.adm-subview').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.adm-tab-btn').forEach(btn => {
+        btn.classList.remove('bg-red-50', 'text-red-600');
+        btn.classList.add('text-gray-600');
+      });
+
+      const target = document.getElementById(`adm-sub-${tabName}`);
+      if (target) target.classList.remove('hidden');
+
+      const activeBtn = document.getElementById(`adm-tab-${tabName}`);
+      if (activeBtn) activeBtn.classList.add('bg-red-50', 'text-red-600');
+
+      if (tabName === 'cozinha') renderKDS();
+      if (tabName === 'driver') renderDriverDashboard();
+      if (tabName === 'qrcodes') generateTableQRCodes();
+    }
+
+    function renderAdminProducts() {
+      const tbody = document.getElementById('admin-products-table-body');
+      tbody.innerHTML = products.map(p => `
+        <tr class="hover:bg-gray-50">
+          <td class="p-4"><img src="${p.image}" class="w-12 h-12 object-cover rounded-xl" onerror="this.src='https://via.placeholder.com/100?text=Sem+Foto'"></td>
+          <td class="p-4 font-bold text-gray-900">${p.name}</td>
+          <td class="p-4 text-xs font-semibold uppercase text-gray-500">${p.category}</td>
+          <td class="p-4 font-extrabold text-gray-900">R$ ${p.price.toFixed(2)}</td>
+          <td class="p-4 text-center">
+            <button onclick="editProduct(${p.id})" class="text-blue-600 hover:text-blue-800 font-bold text-xs mr-2"><i class="fa-solid fa-pen"></i> Editar</button>
+            <button onclick="deleteProduct(${p.id})" class="text-red-600 hover:text-red-800 font-bold text-xs"><i class="fa-solid fa-trash"></i> Excluir</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openProductModal(isEdit = false) {
+      document.getElementById('modal-product-title').innerText = isEdit ? 'Editar Produto' : 'Adicionar Produto';
+      document.getElementById('modal-product').classList.remove('hidden');
+    }
+
+    function closeProductModal() {
+      document.getElementById('modal-product').classList.add('hidden');
+      document.getElementById('form-product').reset();
+      document.getElementById('prod-id').value = '';
+    }
+
+    function saveProduct(event) {
+      event.preventDefault();
+      const id = document.getElementById('prod-id').value;
+      const name = document.getElementById('prod-name').value;
+      const category = document.getElementById('prod-category').value;
+      const price = parseFloat(document.getElementById('prod-price').value);
+      const image = document.getElementById('prod-image').value;
+      const desc = document.getElementById('prod-desc').value;
+
+      if (id) {
+        const prod = products.find(p => p.id === parseInt(id));
+        if (prod) {
+          prod.name = name; prod.category = category; prod.price = price; prod.image = image; prod.desc = desc;
+        }
+      } else {
+        products.push({ id: Date.now(), name, category, price, image, desc });
+      }
+
+      localStorage.setItem('fm_products', JSON.stringify(products));
+      renderAdminProducts();
+      renderCategoryFilters();
+      renderProducts();
+      closeProductModal();
+    }
+
+    function editProduct(id) {
+      const prod = products.find(p => p.id === id);
+      if (!prod) return;
+
+      document.getElementById('prod-id').value = prod.id;
+      document.getElementById('prod-name').value = prod.name;
+      document.getElementById('prod-category').value = prod.category;
+      document.getElementById('prod-price').value = prod.price;
+      document.getElementById('prod-image').value = prod.image;
+      document.getElementById('prod-desc').value = prod.desc;
+
+      openProductModal(true);
+    }
+
+    function deleteProduct(id) {
+      if (confirm('Tem certeza que deseja remover este produto?')) {
+        products = products.filter(p => p.id !== id);
+        localStorage.setItem('fm_products', JSON.stringify(products));
+        renderAdminProducts();
+        renderCategoryFilters();
+        renderProducts();
+      }
+    }
+
+    function renderAdminDeliveryDispatch() {
+      const container = document.getElementById('delivery-orders-dispatch');
+      if (!container) return;
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      const deliveries = orders.filter(o => o.customer.type === 'Delivery');
+
+      if (deliveries.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-gray-400 font-bold text-sm">Nenhum pedido de delivery cadastrado.</div>`;
+        return;
+      }
+
+      container.innerHTML = deliveries.map(o => `
+        <div class="p-4 bg-gray-50 border rounded-2xl space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-extrabold text-sm">#${o.id.toString().slice(-4)} - ${o.customer.name}</span>
+            <span class="text-xs font-bold text-gray-500">${o.status}</span>
+          </div>
+          <p class="text-xs text-gray-600">${o.customer.address}</p>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">Entregador Responsável</label>
+            <input type="text" value="${o.driver || ''}" placeholder="Nome do Motoboy..." onchange="assignDriver(${o.id}, this.value)" class="w-full p-2 border rounded-xl text-xs bg-white">
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function assignDriver(orderId, driverName) {
+      orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        order.driver = driverName;
+        localStorage.setItem('fm_orders', JSON.stringify(orders));
+        renderDriverDashboard();
+      }
+    }
+  
+    function resetDailyOrders() {
+      if (confirm('Tem certeza de que deseja ZERAR TODOS os pedidos e entregas do dia? Esta ação limpará a fila da Cozinha e dos Entregadores.')) {
+        orders = [];
+        localStorage.setItem('fm_orders', JSON.stringify(orders));
+        renderKDS();
+        renderDriverDashboard();
+        renderAdminDeliveryDispatch();
+        renderClientActiveOrder();
+        alert('Todos os pedidos e entregas do dia foram zerados com sucesso!');
+      }
+    }
+  </script>
+</body>
+</html>
