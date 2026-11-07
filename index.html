@@ -600,6 +600,7 @@
       renderClientActiveOrder();
 
       window.addEventListener('hashchange', detectRoute);
+      window.addEventListener('popstate', detectRoute);
 
       window.addEventListener('storage', () => {
         orders = JSON.parse(localStorage.getItem('fm_orders')) || [];
@@ -638,6 +639,9 @@
     function navigateTo(viewId, updateHash = true) {
       if (viewId === 'delivery') {
         currentTable = null;
+        if (window.location.search.includes('mesa=')) {
+          window.history.pushState({}, document.title, window.location.pathname);
+        }
         showDeliveryModeUI();
         viewId = 'menu';
         if (updateHash) window.location.hash = '';
@@ -921,6 +925,13 @@
       if (cart.length === 0) {
         alert('Adicione ao menos um item ao carrinho!');
         return;
+      }
+
+      // Garante a leitura correta da mesa do parâmetro caso tenha sido acessado por QR Code
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlMesa = urlParams.get('mesa');
+      if (urlMesa) {
+        currentTable = parseInt(urlMesa);
       }
 
       let customerData = {};
@@ -1325,7 +1336,7 @@
       if (!container) return;
       container.innerHTML = '';
 
-      const baseUrl = window.location.href.split('#')[0].split('?')[0];
+      const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
 
       for (let i = start; i <= end; i++) {
         const tableUrl = `${baseUrl}?mesa=${i}`;
@@ -1499,4 +1510,4 @@
     }
   </script>
 </body>
-</html>
+  </html>
